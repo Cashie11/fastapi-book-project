@@ -20,13 +20,13 @@ jobs:
     - name: Deploy to EC2
       env:
         PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-        HOST: ${{ secrets.EC2_HOST }}
+        HOST: 13.60.202.106
         USER: ec2-user
       run: |
-        echo "$PRIVATE_KEY" > private_key.pem
-        chmod 400 private_key.pem
+        echo "$PRIVATE_KEY" > my-ec2-key.pem
+        chmod 400 my-ec2-key.pem
         
-        ssh -o StrictHostKeyChecking=no -i "private_key.pem" $USER@$HOST << 'EOF'
+        ssh -o StrictHostKeyChecking=no -i "my-ec2-key.pem" $USER@$HOST << 'EOF'
           cd ~/fastapi-book-project
           git pull origin main
           source ~/venv/bin/activate

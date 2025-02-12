@@ -3,7 +3,7 @@ name: Deploy FastAPI to EC2
 on:
   push:
     branches:
-      - main  # Triggers on push to main
+      - main  # Trigger deployment when code is pushed to main
 
 jobs:
   deploy:
@@ -20,44 +20,67 @@ jobs:
 
     - name: Deploy to EC2
       env:
-        PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}   # Base64-encoded PEM key
-        HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com  # or use your public IP
+        PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}   # Base64-encoded version of your PEM key
+        HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
         USER: ec2-user
       run: |
-        # Decode the Base64-encoded private key and save it as a file
+        # Decode the Base64-encoded key and save it
         echo "$PRIVATE_KEY" | base64 --decode > my-ec2-key.pem
         chmod 400 my-ec2-key.pem
 
-        # SSH into the EC2 instance and run deployment commands
         ssh -o StrictHostKeyChecking=no -i "my-ec2-key.pem" $USER@$HOST << 'EOF'
-          # Ensure necessary packages are installed (Git and Python3)
+          set -e  # Exit immediately if a command exits with a non-zero status
+
+          echo "Installing necessary packages..."
+          # Install Git if not installed
           if ! command -v git >/dev/null 2>&1; then
             sudo yum install git -y
           fi
+          # Install Python3 if not installed
           if ! command -v python3 >/dev/null 2>&1; then
             sudo yum install python3 -y
           fi
+          # Install Nginx if not installed
+          if ! command -v nginx >/dev/null 2>&1; then
+            sudo yum install nginx -y
+          fi
 
+          echo "Setting up the project directory..."
           # Clone the repository if the project directory doesn't exist
           if [ ! -d "/home/$USER/fastapi-book-project" ]; then
             git clone https://github.com/Cashie11/fastapi-book-project.git /home/$USER/fastapi-book-project
           fi
 
-          # Change to the project directory and pull the latest changes
           cd /home/$USER/fastapi-book-project
+          echo "Pulling latest changes..."
           git pull origin main
 
-          # Set up the Python virtual environment if it doesn't already exist
+          echo "Setting up the Python virtual environment..."
           if [ ! -d "venv" ]; then
             python3 -m venv venv
           fi
           source venv/bin/activate
-
-          # Upgrade pip and install dependencies
           pip install --upgrade pip
           pip install -r requirements.txt
 
-          # Restart the FastAPI and Nginx services
-          sudo systemctl restart fastapi || echo "fastapi.service not found"
-          sudo systemctl restart nginx || echo "nginx.service not found"
+          echo "Configuring Nginx..."
+          # If the project has an nginx.conf file, copy it to /etc/nginx/nginx.conf
+          if [ -f "nginx.conf" ]; then
+            sudo cp nginx.conf /etc/nginx/nginx.conf
+          fi
+
+          # Test the Nginx configuration
+          sudo nginx -t
+
+          echo "Restarting services..."
+          # Attempt to restart the fastapi service if it exists;
+          # if not, run the FastAPI app in the background using nohup.
+          if sudo systemctl is-active fastapi >/dev/null 2>&1; then
+            sudo systemctl restart fastapi
+          else
+            echo "fastapi.service not found. Starting FastAPI with Uvicorn..."
+            nohup venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 &
+          fi
+
+          sudo systemctl restart nginx || sudo nginx -s reload
         EOF

@@ -1,0 +1,37 @@
+name: Deploy FastAPI to EC2
+
+on:
+  push:
+    branches:
+      - main  # Triggers on push to main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Run Tests
+      run: |
+        pip install -r requirements.txt
+        pytest
+
+    - name: Deploy to EC2
+      env:
+        PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        HOST: ${{ secrets.EC2_HOST }}
+        USER: EC2_HOST
+      run: |
+        echo "$PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
+        
+        ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
+          cd ~/fastapi-book-project
+          git pull origin main
+          source ~/venv/bin/activate
+          pip install -r requirements.txt
+          sudo systemctl restart fastapi
+          sudo systemctl restart nginx
+        EOF

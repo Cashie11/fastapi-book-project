@@ -16,17 +16,19 @@ jobs:
     - name: Run Tests
       run: |
         pip install -r requirements.txt
+        pytest
 
     - name: Deploy to EC2
       env:
         PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-        HOST: 13.60.202.106
-        USER: ec2-user
+        HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com   # Replace with your EC2 public IP or DNS if needed.
+        USER: ec2-user        # Adjust this if your instance uses a different SSH user.
       run: |
-        # Decode the base64-encoded private key and save it to a file
+        # Decode the Base64-encoded private key and save it to a file
         echo "$PRIVATE_KEY" | base64 --decode > my-ec2-key.pem
         chmod 400 my-ec2-key.pem
         
+        # SSH into the EC2 instance and run deployment commands
         ssh -o StrictHostKeyChecking=no -i "my-ec2-key.pem" $USER@$HOST << 'EOF'
           cd ~/fastapi-book-project
           git pull origin main

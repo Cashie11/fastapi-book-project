@@ -83,4 +83,6 @@ jobs:
           fi
 
           sudo systemctl restart nginx || sudo nginx -s reload
+
+          exit 0
         EOF

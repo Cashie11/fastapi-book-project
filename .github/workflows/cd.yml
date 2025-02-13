@@ -17,13 +17,13 @@ jobs:
 
       - name: Set Up SSH Key
         env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}  # Base64-encoded private key
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
           USER: ubuntu
         run: |
           mkdir -p ~/.ssh
-          echo "$EC2_SSH_KEY" | base64 --decode > ~/.ssh/ec2_ssh_key.pem
-          chmod 600 ~/.ssh/ec2_ssh_key.pem
+          echo "$EC2_SSH_KEY" | base64 --decode > ~/.ssh/my-ec2-key.pem
+          chmod 600 ~/.ssh/my-ec2-key.pem
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
 
       - name: Deploy to AWS EC2
@@ -31,7 +31,7 @@ jobs:
           HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
           USER: ubuntu
         run: |
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/ec2_ssh_key.pem $USER@$HOST <<'EOF'
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/my-ec2-key.pem $USER@$HOST <<'EOF'
             cd fastapi-book-project
             git pull origin main
             source venv/bin/activate

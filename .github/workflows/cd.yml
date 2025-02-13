@@ -16,13 +16,12 @@ jobs:
           python-version: '3.12'
 
       - name: Set Up SSH Key
+        run: echo "Setting up SSH key"
         env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          echo "$EC2_SSH_KEY" > ~/.ssh/ec2_ssh_key.pem
-          chmod 600 ~/.ssh/ec2_ssh_key.pem
-          ssh-keyscan -H ec2-13-60-202-106.eu-north-1.compute.amazonaws.com >> ~/.ssh/known_hosts
+            EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+            HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
+            USER: ubuntu
+
 
       - name: Deploy to AWS EC2
         run: |

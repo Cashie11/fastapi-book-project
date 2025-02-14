@@ -15,31 +15,92 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Set Up SSH Key
-        env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
-        run: |
-          mkdir -p ~/.ssh
-          # Add debugging for key content length
-          echo "Key length: $(echo "$EC2_SSH_KEY" | wc -c)"
-          # Ensure key starts with correct header
-          echo "First line of key:"
-          echo "$EC2_SSH_KEY" | head -n 1
-          # Write key directly without any encoding/decoding
-          echo "$EC2_SSH_KEY" > ~/.ssh/my-ec2-key.pem
-          chmod 600 ~/.ssh/my-ec2-key.pem
-          ls -l ~/.ssh/my-ec2-key.pem
-          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
-
-      - name: Deploy to AWS EC2
-        env:
-          HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
-        run: |
-          ssh -v -i "~/.ssh/my-ec2-key.pem" ec2-user@$HOST <<'EOF'
-            cd fastapi-book-project
+          - name: Deploy to EC2
+          env:
+            PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+            HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
+            USER: ec2-user
+          run: |
+            # Decode the Base64-encoded private key and save it to a file
+            echo "$PRIVATE_KEY" | base64 --decode > my-ec2-key.pem
+            chmod 400 my-ec2-key.pem
+    
+            # SSH into the EC2 instance and run deployment commands
+            ssh -o StrictHostKeyChecking=no -i "my-ec2-key.pem" $USER@$HOST <<'EOF'
+            set -e
+    
+            echo "Installing necessary packages..."
+            if ! command -v git >/dev/null 2>&1; then
+              sudo yum install git -y
+            fi
+            if ! command -v python3 >/dev/null 2>&1; then
+              sudo yum install python3 -y
+            fi
+            if ! command -v nginx >/dev/null 2>&1; then
+              sudo yum install nginx -y
+            fi
+    
+            echo "Setting up the project directory..."
+            if [ ! -d "/home/$USER/fastapi-book-project" ]; then
+              git clone https://github.com/Cashie11/fastapi-book-project.git /home/$USER/fastapi-book-project
+            fi
+    
+            cd /home/$USER/fastapi-book-project
+            echo "Pulling latest changes..."
             git pull origin main
+    
+            echo "Setting up the Python virtual environment..."
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
+            fi
             source venv/bin/activate
+            pip install --upgrade pip
             pip install -r requirements.txt
-            sudo systemctl restart fastapi-book.service
-          EOF
+    
+            echo "Configuring Nginx..."
+            if [ -f "nginx.conf" ]; then
+              sudo cp nginx.conf /etc/nginx/nginx.conf
+            fi
+            sudo nginx -t
+    
+            echo "Restarting services..."
+            if sudo systemctl is-active fastapi >/dev/null 2>&1; then
+              sudo systemctl restart fastapi
+            else
+              echo "fastapi.service not found. Starting FastAPI with Uvicorn..."
+              nohup venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 > uvicorn.log 2>&1 &
+              disown
+            fi
+            sudo systemctl restart nginx || sudo nginx -s reload
+    
+            exit 0
+            EOF
+
+      # - name: Set Up SSH Key
+      #   env:
+      #     EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      #     HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
+      #   run: |
+      #     mkdir -p ~/.ssh
+      #     # Add debugging for key content length
+      #     echo "Key length: $(echo "$EC2_SSH_KEY" | wc -c)"
+      #     # Ensure key starts with correct header
+      #     echo "First line of key:"
+      #     echo "$EC2_SSH_KEY" | head -n 1
+      #     # Write key directly without any encoding/decoding
+      #     echo "$EC2_SSH_KEY" > ~/.ssh/my-ec2-key.pem
+      #     chmod 600 ~/.ssh/my-ec2-key.pem
+      #     ls -l ~/.ssh/my-ec2-key.pem
+      #     ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
+
+      # - name: Deploy to AWS EC2
+      #   env:
+      #     HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
+      #   run: |
+      #     ssh -v -i "~/.ssh/my-ec2-key.pem" ec2-user@$HOST <<'EOF'
+      #       cd fastapi-book-project
+      #       git pull origin main
+      #       source venv/bin/activate
+      #       pip install -r requirements.txt
+      #       sudo systemctl restart fastapi-book.service
+      #     EOF

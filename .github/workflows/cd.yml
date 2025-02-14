@@ -21,15 +21,22 @@ jobs:
           HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/my-ec2-key.pem
+          # Add debugging for key content length
+          echo "Key length: $(echo "$EC2_SSH_KEY" | wc -c)"
+          # Ensure key starts with correct header
+          echo "First line of key:"
+          echo "$EC2_SSH_KEY" | head -n 1
+          # Write key directly without any encoding/decoding
+          echo "$EC2_SSH_KEY" > ~/.ssh/my-ec2-key.pem
           chmod 600 ~/.ssh/my-ec2-key.pem
+          ls -l ~/.ssh/my-ec2-key.pem
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
 
       - name: Deploy to AWS EC2
         env:
           HOST: ec2-13-60-202-106.eu-north-1.compute.amazonaws.com
         run: |
-          ssh -i ~/.ssh/my-ec2-key.pem ubuntu@$HOST <<'EOF'
+          ssh -v -i ~/.ssh/my-ec2-key.pem ec2-user@$HOST <<'EOF'
             cd fastapi-book-project
             git pull origin main
             source venv/bin/activate
